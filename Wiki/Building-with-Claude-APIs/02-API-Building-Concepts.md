@@ -971,6 +971,13 @@ Key Components:
 - Implementation requires handling additional event type in streaming pipeline
 
 Fine-Grained Tool Calling = feature that disables JSON validation for faster streaming
+```python
+run_conversation(
+    messages, 
+    tools=[save_article_schema], 
+    fine_grained=True
+)
+```
 
 Default Behavior:
 - Claude generates JSON chunks for tool arguments
@@ -999,6 +1006,8 @@ Use Cases:
 
 Text Editor Tool = built-in Claude tool for file/text operations (read, write, create, replace, undo files/directories)
 
+==> [Official Anthropic Text Editor Docs](https://platform.claude.com/docs/en/agents-and-tools/tool-use/text-editor-tool)
+
 Key characteristics:
 - Only JSON schema built into Claude, implementation must be custom-coded
 - Schema stub sent to Claude gets auto-expanded to full schema
@@ -1007,7 +1016,13 @@ Key characteristics:
 
 Required implementation:
 - Custom class/functions to handle Claude's tool use requests
-- Functions for: view files, string replace, create files, etc.
+- Functions for: 
+    - View file or directory contents
+    - View specific ranges of lines in a file
+    - Replace text in a file
+    - Create new files
+    - Insert text at specific lines in a file
+    - Undo recent edits to files
 - Actual file system operations not provided by Claude
 
 Workflow:
@@ -1025,6 +1040,9 @@ Use cases:
 
 Benefits = approximates fancy code editor capabilities through API calls rather than GUI interaction.
 
+## Batch Processing API
+If you need to process some queries for testing, training, or efficient applications in bulk use batch processing strategy <br>
+[Official Anthropic: Batch Processing API](https://platform.claude.com/docs/en/build-with-claude/batch-processing)
 
 ## The Web Search Tool
 
@@ -1056,9 +1074,9 @@ UI Rendering Pattern:
 
 Use Case Example: Restricting to NIH.gov for medical/exercise advice ensures scientifically-backed information vs generic web content.
 
-
+---
 ## Introducing Retrieval Augmented Generation
-
+---
 RAG = Retrieval Augmented Generation technique for querying large documents using language models.
 
 Problem: How to extract specific information from large documents (100-1000+ pages) using Claude without hitting context limits.
@@ -1148,6 +1166,16 @@ Key Math Concepts:
 
 Process Flow: Pre-processing (steps 1-4) → User Query → Real-time retrieval (steps 5-7) → LLM Response
 
+### How Similarity Works: Cosine Similarity
+The vector database uses cosine similarity to determine which embeddings are most similar. This measures the cosine of the angle between two vectors.
+![alt text](image-7.png)
+
+### Cosine Distance (its not Consine Similarity exactly)
+You'll often see "cosine distance" in vector database documentation. This is simply calculated as (1 - cosine similarity). With cosine distance:
+
+Values close to 0 mean high similarity
+Larger values mean less similarity
+This adjustment makes the numbers easier to interpret in many contexts.
 
 ## Implementing the Rag Flow
 
@@ -1203,7 +1231,8 @@ Key Components:
 - BM25 Index = lexical/keyword-based search 
 - Retriever Class = wrapper that forwards queries to both indexes and merges results
 
-Reciprocal Rank Fusion = technique for merging search results from different indexes. Formula: RRF_score = sum of (1/(rank + 1)) across all search methods for each document. Documents ranked by highest combined score.
+**Reciprocal Rank Fusion** = technique for merging search results from different indexes. Formula: RRF_score = sum of (1/(rank + 1)) across all search methods for each document. Documents ranked by highest combined score.
+![alt text](image-8.png)
 
 Example: Vector search returns [doc2, doc7, doc6], BM25 returns [doc6, doc2, doc7]. After RRF calculation, final ranking becomes [doc2, doc6, doc7] because doc2 ranked high in both methods.
 
@@ -1253,6 +1282,9 @@ Implementation: add_context function takes text chunk + source text, generates c
 
 Benefit: Chunks retain ties to larger document structure and cross-references, improving retrieval accuracy for complex documents with interconnected sections.
 
+---
+# Faetures of Claude
+---
 
 ## Extended Thinking
 
@@ -1311,7 +1343,7 @@ Key Takeaway = image accuracy depends entirely on prompt sophistication, not jus
 
 ## PDF Support
 
-PDF Support in Claude:
+PDF Support in Claude: [Official Anthropic Docs: PDFs](https://platform.claude.com/docs/en/build-with-claude/pdf-support)
 
 Claude can read PDF files directly using similar code to image processing. 
 
@@ -1329,7 +1361,9 @@ Usage pattern = same as image input but with document-specific parameters
 
 ## Citations
 
-Citations = feature allowing Claude to reference source documents and show where information comes from
+Citations = feature allowing Claude to reference source documents and show where information comes from <br>
+[Official Anthropic Docs: Citations](https://platform.claude.com/docs/en/build-with-claude/citations)
+[Official Anthropic Docs: Citations Cookbook](https://platform.claude.com/cookbook/misc-using-citations)
 
 Citation types:
 - citation_page_location = for PDF documents, shows document index/title/start page/end page/cited text
@@ -1348,17 +1382,61 @@ UI benefit = enables citation popups/overlays showing source document, page numb
 
 Key use case = ensuring users can investigate how Claude builds responses from source materials rather than appearing to speak from memory alone
 
+### Enabling Citations
+To enable citations, you need to modify your document message structure. Add two new fields to your document block:
+```json
+{
+    "type": "document",
+    "source": {
+        "type": "base64",
+        "media_type": "application/pdf",
+        "data": file_bytes,
+    },
+    "title": "earth.pdf",
+    "citations": { "enabled": True }
+}
+```
+
+### Citations with Plain Text
+Citations aren't limited to PDF documents. You can also use them with plain text sources. When working with text, modify your document structure like this:
+
+```json
+{
+    "type": "document", 
+    "source": {
+        "type": "text",
+        "media_type": "text/plain",
+        "data": article_text,
+    },
+    "title": "earth_article",
+    "citations": { "enabled": True }
+}
+```
+With plain text sources, instead of page numbers, you'll get character positions that pinpoint exactly where in the text Claude found each piece of information.
+
+### Understanding Citation Structure
+When citations are enabled, Claude's response becomes more complex. Instead of simple text, you get structured data that includes citation information for each claim.
+
+![alt text](image-9.png)
+Each citation contains several key pieces of information:
+
+- cited_text - The exact text from your document that supports Claude's statement
+- document_index - Which document Claude is referencing (useful when you provide multiple documents)
+- document_title - The title you assigned to the document
+- start_page_number - Where the cited text begins
+- end_page_number - Where the cited text ends
 
 ## Prompt Caching
 
 Prompt Caching = feature that speeds up Claude's responses and reduces text generation costs by reusing computational work from previous requests.
+[Prompt caching — Claude Platform Docs](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)
 
 Normal request flow: User sends message → Claude processes input (creates internal data structures, performs calculations) → Claude generates output → Claude discards all processing work → Ready for next request.
-
+![alt text](image-11.png)
 Problem: When follow-up requests contain identical input messages, Claude must repeat all the same computational work it just threw away, creating inefficiency.
-
+![alt text](image-12.png)
 Solution: Prompt caching stores the results of input message processing in temporary cache instead of discarding. When identical input appears in subsequent requests, Claude retrieves cached work rather than reprocessing, dramatically speeding response generation.
-
+![alt text](image-10.png)
 Key benefit: Reuses previous computational work to avoid redundant processing of repeated content.
 
 
@@ -1368,6 +1446,11 @@ Prompt Caching = system that saves processing work from initial request to reuse
 
 Core mechanism: Initial request → Claude processes + saves work to cache → Follow-up requests with identical content → Claude retrieves cached work instead of reprocessing
 
+### Cache Ordering
+Behind the scenes, Claude processes your request components in a specific order: tools first, then system prompt, then messages. Understanding this order helps you place breakpoints effectively.
+![alt text](image-13.png)
+
+### Caching Features
 Cache duration = 1 hour maximum
 
 Cache activation requires manual cache breakpoint addition to message blocks
@@ -1436,8 +1519,9 @@ Use cases: Data analysis, file processing, automated code generation for complex
 
 Implementation: Use container upload block with file ID, include analysis prompt, Claude handles code execution automatically.
 
-
+---
 ## Introducing MCP
+---
 
 MCP = Model Context Protocol, communication layer providing Claude with context and tools without requiring developers to write tedious code.
 
@@ -1496,7 +1580,7 @@ Project components:
 - MCP client = connects to custom MCP server
 - MCP server = provides 2 tools (read document, update document)
 - Document collection = fake documents stored in memory only
-
+![alt text](image-14.png)
 Key distinction: Normal projects implement either client OR server, not both. This project implements both for educational purposes.
 
 Setup process:
