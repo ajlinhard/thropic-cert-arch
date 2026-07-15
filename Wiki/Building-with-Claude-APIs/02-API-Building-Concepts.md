@@ -232,10 +232,13 @@ How it works:
 4. Server forwards chunks to frontend for real-time display
 
 Event types:
-- message_start = initial acknowledgment
-- content_block_start = text generation begins
-- content_block_delta = contains actual text chunks (most important)
-- content_block_stop/message_stop = generation complete
+- MessageStart - A new message is being sent
+- ContentBlockStart - Start of a new block containing text, tool use, or other content
+- ContentBlockDelta - Chunks of the actual generated text
+- ContentBlockStop - The current content block has been completed
+- MessageDelta - The current message is complete
+- MessageStop - End of information about the current message
+![alt text](image-3.png)
 
 Implementation:
 Basic: client.messages.create(stream=True) returns event iterator
@@ -294,6 +297,23 @@ Application = Works for any structured data type (JSON, Python code, lists, etc.
 
 Key benefit = Output can be directly used/copied without manual selection or parsing of unwanted text.
 
+---
+# Prompt Engineering and Prompt Evaluation
+---
+
+## Prompt Engineering vs Prompt Evaluation
+Prompt engineering is your toolkit for crafting effective prompts. It includes techniques like:
+
+- Multishot prompting
+- Structuring with XML tags
+- Many other best practices
+These techniques help Claude understand exactly what you're asking for and how you want it to respond.
+
+Prompt evaluation takes a different approach. Instead of focusing on how to write prompts, it's about measuring their effectiveness through automated testing. You can:
+
+- Test against expected answers
+- Compare different versions of the same prompt
+- Review outputs for errors
 
 ## Prompt Evaluation
 
@@ -377,6 +397,7 @@ Three grader types:
 - Code graders = programmatic checks (length, word presence, syntax validation, readability scores)
 - Model graders = additional API call to evaluate original model output, highly flexible for quality/instruction-following assessment
 - Human graders = person evaluates responses, most flexible but time-consuming and tedious
+![alt text](image-4.png)
 
 Key requirements: Must return objective signal (usually numerical score). Define evaluation criteria upfront.
 
@@ -387,6 +408,30 @@ Implementation pattern for model graders:
 - Calculate average scores across test cases for final metric
 
 Model graders offer high flexibility but may be inconsistent. Still provides objective baseline for prompt optimization.
+#### Example Model Grader
+```python
+def grade_by_model(test_case, output):
+    # Create evaluation prompt
+    eval_prompt = """
+    You are an expert code reviewer. Evaluate this AI-generated solution.
+    
+    Task: {task}
+    Solution: {solution}
+    
+    Provide your evaluation as a structured JSON object with:
+    - "strengths": An array of 1-3 key strengths
+    - "weaknesses": An array of 1-3 key areas for improvement  
+    - "reasoning": A concise explanation of your assessment
+    - "score": A number between 1-10
+    """
+    
+    messages = []
+    add_user_message(messages, eval_prompt)
+    add_assistant_message(messages, "```json")
+    
+    eval_text = chat(messages, stop_sequences=["```"])
+    return json.loads(eval_text)
+```
 
 
 ## Code Based Grading
@@ -415,6 +460,37 @@ Scoring System:
 
 Key Limitation = requires known expected format for proper validator selection
 
+```python
+def validate_json(text):
+    try:
+        json.loads(text.strip())
+        return 10
+    except json.JSONDecodeError:
+        return 0
+
+def validate_python(text):
+    try:
+        ast.parse(text.strip())
+        return 10
+    except SyntaxError:
+        return 0
+
+def validate_regex(text):
+    try:
+        re.compile(text.strip())
+        return 10
+    except re.error:
+        return 0
+
+def grade_syntax(response, test_case):
+    format = test_case["format"]
+    if format == "json":
+        return validate_json(response)
+    elif format == "python":
+        return validate_python(response)
+    else:
+        return validate_regex(response)
+```
 
 ## Prompt Engineering
 
@@ -453,6 +529,8 @@ Examples:
 - "Identify three countries that use geothermal energy and for each include generation stats"
 - "Generate a one day meal plan for an athlete that meets their dietary restrictions"
 
+![alt text](image-5.png)
+
 Key components = Action verb at start + direct task statement + expected output details.
 
 Result = Improved prompt performance (example showed score increase from 2.32 to 3.92).
@@ -466,6 +544,7 @@ Two types of guidelines:
 Type A (Attributes) = list qualities/attributes desired in output (length, structure, format)
 Type B (Steps) = provide specific steps for model to follow in reasoning process
 
+![alt text](image-6.png)
 Type A controls output characteristics. Type B controls how model arrives at answer.
 
 Both techniques often combined in professional prompts.
@@ -476,6 +555,25 @@ When to use:
 
 Example improvement: meal planning prompt score jumped from 3.92 to 7.86 when guidelines added, demonstrating significant quality improvement through specificity.
 
+### Output Quality Guidelines
+The first type focuses on listing qualities that your output should have. These guidelines help you control:
+
+- Length of the response
+- Structure and format
+- Specific attributes or elements to include
+- Tone or style requirements
+For example, you might specify that a story should be under 1,000 words, include a clear action that reveals the character's talent, and feature at least one supporting character.
+
+###  Process Steps
+The second type provides specific steps for Claude to follow. This approach is particularly useful when you want Claude to think through a problem systematically or consider multiple perspectives before arriving at a final answer.
+
+Instead of jumping straight to writing, you might ask Claude to:
+
+1. Brainstorm three talents that would create dramatic tension
+2. Pick the most interesting talent
+3. Outline a pivotal scene that reveals the talent
+4. Brainstorm supporting character types that could increase the impact
+
 
 ## Structure with XML Tags
 
@@ -483,7 +581,12 @@ XML Tags for Prompt Structure = Using XML tags to organize and delineate differe
 
 Purpose = When interpolating large amounts of content into prompts, XML tags help AI models distinguish between different types of information and understand text grouping.
 
-Implementation = Wrap content sections in descriptive XML tags like <sales_records></sales_records> or <my_code></my_code> rather than dumping unstructured text.
+Implementation = Wrap content sections in descriptive XML tags like <sales_records></sales_records> or <my_code></my_code> rather than dumping unstructured text. XML tags are most useful when:
+
+- Including large amounts of context or data
+- Mixing different types of content (code, documentation, data)
+- You want to be extra clear about content boundaries
+- Working with complex prompts that interpolate multiple variables
 
 Tag naming = Use descriptive, specific tag names (e.g., "sales_records" better than "data") to provide context about content nature.
 
@@ -491,10 +594,21 @@ Example use case = Debugging prompt with mixed code and documentation becomes cl
 
 Benefits = Makes prompt structure obvious to AI, reduces confusion about content boundaries, improves output quality even for smaller content blocks.
 
+### Example Application
 Application = Can wrap any interpolated content like <athlete_information> even when content is short, to clarify it's external input requiring consideration.
+```
+<athlete_information>
+- Height: 6'2"
+- Weight: 180 lbs
+- Goal: Build muscle
+- Dietary restrictions: Vegetarian
+</athlete_information>
+
+Generate a meal plan based on the athlete information above.
+```
 
 
-## Providing Examples
+## Providing Examples (One-shot/Multi-shot prompting)
 
 One-shot/Multi-shot prompting = providing examples in prompts to guide model behavior. One-shot = single example, multi-shot = multiple examples.
 
@@ -504,6 +618,7 @@ Key applications:
 - Corner case handling (sarcasm detection, edge scenarios)
 - Complex output formatting (JSON structures, specific formats)
 - Clarifying expected response quality/style
+- Combine with XML tags!
 
 Best practices:
 - Add context for corner cases ("be especially careful with sarcasm")
@@ -513,8 +628,9 @@ Best practices:
 
 Effectiveness boost: Combine examples with explanations of what makes them ideal to reinforce desired output characteristics.
 
-
-## Introducing Tool Use
+---
+# Introducing Tool Use
+---
 
 Tool use = method for Claude to access external information beyond training data.
 
@@ -584,10 +700,9 @@ Purpose: Extend Claude's capabilities beyond its training data by providing acce
 
 
 ## Tool Schemas
-
-Tool Schemas = JSON schema specifications that describe tool functions and their parameters for language models
-
-JSON Schema = data validation specification (not ML-specific) used to validate JSON data, adopted by ML community for tool calling
+JSON Schema is a format where an application is say "ive me a JSON record and needs to know exactly how the record should be organized. Here is the official documentation ==> [Link](https://json-schema.org/understanding-json-schema/about)
+- Tool Schemas = JSON schema specifications that describe tool functions and their parameters for language models
+- JSON Schema = data validation specification (not ML-specific) used to validate JSON data, adopted by ML community for tool calling
 
 Tool Schema Structure:
 - name: tool identifier 
@@ -603,11 +718,51 @@ Schema Generation Trick:
 Implementation Pattern:
 - Name functions descriptively
 - Name schemas as [function_name]_schema
-- Import ToolParam from anthropic.types
 - Wrap schema dictionary with ToolParam() to prevent type errors
+- Import ToolParam from anthropic.types
+'''python
+from anthropic.types import ToolParam
+
+get_current_datetime_schema = ToolParam({
+    "name": "get_current_datetime",
+    "description": "Returns the current date and time formatted according to the specified format",
+    # ... rest of schema
+})
+```
 
 Purpose = inform Claude about available tools, required arguments, and usage context through standardized JSON validation format
 
+### Trick for AI Prompt
+Ask an AI chatbot or agent the following prompt with:
+```
+Write a valid JSON schema spec for the purpose of AI tool calling for this function. Follow the best practices in claudes AI Tool calling docmentation.
+
+<tool_function>
+def get_current_datetime(date_format="%Y-%m-%d %H:%M:%S"):
+    if not date_format:
+        raise ValueError("date_format cannot be empty")
+    return datetime.now().strftime(date_format)
+</tool_function>
+
+<example_output>
+{
+    "name": "get_current_datetime",
+    "description": "Returns the current date and time formatted according to the specified format",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "date_format": {
+                "type": "string",
+                "description": "A string specifying the format of the returned datetime. Uses Python's strftime format codes.",
+                "default": "%Y-%m-%d %H:%M:%S"
+            }
+        },
+        "required": []
+    }
+}
+</example_output>
+
+```
 
 ## Handling Message Blocks
 
@@ -620,8 +775,28 @@ Step 3: Making requests to Claude with tools = include tool schema in request al
 Content structure change = messages now contain multiple blocks instead of just text blocks.
 
 Tool response format = assistant message with:
-- Text block = user-facing explanation 
-- Tool use block = contains function name + arguments for tool execution
+- Text block = Human-readable text explaining what Claude is doing (like "I can help you find out the current time. Let me find that information for you")
+- Tool use block =  Instructions for your code about which tool to call and what parameters to use
+
+#### The ToolUse block includes:
+
+- An ID for tracking the tool call
+- The name of the function to call (like "get_current_datetime")
+- Input parameters formatted as a dictionary
+- The type designation "tool_use"
+
+```python
+# Example Message for ToolResult
+messages.append({
+    "role": "user",
+    "content": [{
+        "type": "tool_result",
+        "tool_use_id": response.content[1].id,
+        "content": "15:04:22", # serialized string
+        "is_error": False
+    }]
+})
+```
 
 ### Message History Management
 
