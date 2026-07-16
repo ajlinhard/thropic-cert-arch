@@ -1,6 +1,6 @@
 import os
 import pytest
-from tools.document import binary_document_to_markdown
+from tools.document import binary_document_to_markdown, pdf_to_markdown
 
 
 class TestBinaryDocumentToMarkdown:
@@ -46,4 +46,20 @@ class TestBinaryDocumentToMarkdown:
         assert isinstance(result, str)
         assert len(result) > 0
         # Check for typical markdown formatting - this will depend on your actual test file
+        assert "#" in result or "-" in result or "*" in result
+
+
+class TestPdfToMarkdown:
+    FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
+    PDF_FIXTURE = os.path.join(FIXTURES_DIR, "mcp_docs.pdf")
+
+    def test_pdf_to_markdown(self):
+        """Test converting a PDF document to markdown via the dedicated tool."""
+        with open(self.PDF_FIXTURE, "rb") as f:
+            pdf_data = f.read()
+
+        result = pdf_to_markdown(pdf_data)
+
+        assert isinstance(result, str)
+        assert len(result) > 0
         assert "#" in result or "-" in result or "*" in result
