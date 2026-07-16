@@ -1525,6 +1525,10 @@ Implementation: Use container upload block with file ID, include analysis prompt
 
 MCP = Model Context Protocol, communication layer providing Claude with context and tools without requiring developers to write tedious code.
 
+1. ==> [Official Anthropic Docs: MCP](https://code.claude.com/docs/en/mcp-quickstart)
+2. ==> [Official FastMCP Docs](https://gofastmcp.com/getting-started/welcome)
+3. ==> [Useful MCPs (Reddit Post)](https://www.reddit.com/r/ClaudeCode/comments/1tpdltv/the_10_best_mcp_servers_for_claude_code_right_now/)
+
 Architecture: MCP client connects to MCP server. Server contains tools, resources, and prompts as internal components.
 
 Problem solved: Eliminates burden of authoring/maintaining numerous tool schemas and functions for service integrations. Example: GitHub chatbot would require implementing tools for repositories, pull requests, issues, projects - significant developer effort.
@@ -1599,9 +1603,28 @@ Expected outcome = working chat interface that responds to basic queries, ready 
 
 MCP server implementation using Python SDK creates tools through decorators rather than manual JSON schemas.
 
+```python
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("DocumentMCP", log_level="ERROR")
+```
+
 MCP Python SDK = Official package that auto-generates tool JSON schemas from Python function definitions using @mcp.tool decorator.
 
 Tool definition syntax = @mcp.tool(name="tool_name", description="description") + function with typed parameters using Field() for argument descriptions.
+```python
+@mcp.tool(
+    name="read_doc_contents",
+    description="Read the contents of a document and return it as a string."
+)
+def read_document(
+    doc_id: str = Field(description="Id of the document to read")
+):
+    if doc_id not in docs:
+        raise ValueError(f"Doc with id {doc_id} not found")
+    
+    return docs[doc_id]
+```
 
 Two tools implemented:
 1. read_doc_contents = Takes doc_id string, returns document content from in-memory docs dictionary
@@ -1622,6 +1645,10 @@ MCP Inspector = in-browser debugger for testing MCP servers without connecting t
 
 Access: Run `mcp dev [server_file.py]` in terminal → opens server on port → navigate to provided URL in browser
 
+The MCP inspector is actively being developed, so the interface you see might look different from current screenshots. However, the core functionality for testing tools, resources, and prompts should remain similar.
+
+![alt text](image-15.png)
+
 Interface: Left sidebar has connect button → top menu shows resources/prompts/tools sections → tools section lists available tools → click tool to open right panel for manual testing
 
 Testing workflow: Connect to server → navigate to tools → select specific tool → input required parameters → click run tool → verify output
@@ -1632,7 +1659,7 @@ Note: UI actively changing during development, core functionality remains simila
 
 Example usage: Test document tools by inputting document IDs, verify read operations, test edit operations, chain operations to verify changes
 
-Primary benefit: Debug MCP server implementations efficiently during development phase
+**Primary benefit**: Debug MCP server implementations efficiently during development phase
 
 
 ## Implementing a Client
@@ -1656,6 +1683,38 @@ Common Pattern = wrap client session in larger class for resource management rat
 Testing = can run client file directly with testing harness to verify server connection and tool retrieval
 
 Integration = other code in project calls client functions to interact with MCP server, enabling Claude to inspect/edit documents through defined tools
+
+### MCP Communication
+MCP (Model Context Protocol) can communicate over these transport protocols:
+
+**Standard Transports:**
+- **stdio** — communication over standard input/output (local processes)
+- **HTTP with SSE** (Server-Sent Events) — for remote/network connections (HTTP POST for client→server, SSE for server→client)
+- **Streamable HTTP** — a newer unified transport replacing SSE, using a single HTTP endpoint that supports both request/response and streaming
+
+**Custom/Extensible:**
+- Any custom transport can be implemented as long as it satisfies MCP's message framing interface (JSON-RPC 2.0 over the wire)
+
+In practice, **stdio** is used for local tool servers and **HTTP-based transports** for remote services.
+
+Beyond the main ones, a few more that are used or supported:
+
+- **WebSockets** — full-duplex persistent connections, useful for low-latency bidirectional communication
+- **Unix domain sockets** — IPC on the same machine, faster than TCP for local communication
+- **In-process / in-memory** — no network at all; client and server run in the same process (common in testing/embedded scenarios)
+
+**Adpatable Optons:**
+Here are some other network-based communication protocols that could be used or adapted for MCP-style communication:
+
+gRPC — high-performance RPC over HTTP/2 with protobuf serialization
+MQTT — lightweight pub/sub protocol, common in IoT
+AMQP — message queuing protocol (e.g. RabbitMQ)
+ZeroMQ — brokerless messaging library with various patterns (pub/sub, push/pull, req/rep)
+TCP raw sockets — direct TCP with custom framing
+NATS — lightweight, high-performance pub/sub messaging
+Redis Pub/Sub — using Redis as a message broker
+
+Note: these aren't officially part of the MCP spec — MCP's spec only defines stdio and HTTP-based transports. But since MCP uses JSON-RPC 2.0 as its message format, it can theoretically run over any reliable transport layer.
 
 
 ## Defining Resources
@@ -1687,6 +1746,19 @@ MCP Resource Access Implementation:
 
 Resource Reading Function = client-side function to request and parse resources from MCP server
 
+```python
+@mcp.resource("docs://documents", mime_type="application/json")
+def list_docs() -> list[str]:
+    return list(docs.keys())
+
+
+@mcp.resource("docs://documents/{doc_id}", mime_type="text/plain")
+def fetch_doc(doc_id: str) -> str:
+    if doc_id not in docs:
+        raise ValueError(f"Doc with id {doc_id} not found")
+    return docs[doc_id]
+```
+
 Function Parameters = URI (resource identifier)
 
 Implementation Steps:
@@ -1713,6 +1785,31 @@ Key Point = Resources expose server information directly to clients through stru
 MCP Prompts = Pre-defined, tested prompt templates that MCP servers expose to client applications for specialized tasks.
 
 Purpose = Instead of users writing ad-hoc prompts, server authors create high-quality, evaluated prompts tailored to their server's domain.
+```python
+from pydantic import Field
+from mcp.server.fastmcp.prompts import base
+
+@mcp.prompt(
+    name="format",
+    description="Rewrites the contents of the document in Markdown format.",
+)
+def format_document(
+    doc_id: str = Field(description="Id of the document to format"),
+) -> list[base.Message]:
+    prompt = f"""
+    Your goal is to reformat a document to be written with markdown syntax.
+
+    The id of the document you need to reformat is:
+    <document_id>
+    {doc_id}
+    </document_id>
+
+    Add in headers, bullet points, tables, etc as necessary. Feel free to add in extra text, but don't change the meaning of the report.
+    Use the 'edit_document' tool to edit the document. After the document has been edited, respond with the final version of the doc. Don't explain your changes.
+    """
+
+    return [base.UserMessage(prompt)]
+```
 
 Implementation = Use @mcpserver.prompt decorator with name/description, define function that returns list of messages (user/assistant messages that can be sent directly to Claude).
 
@@ -1741,8 +1838,9 @@ Prompt workflow:
 
 Key concept: Prompts are server-defined templates that clients can invoke with specific arguments to generate contextualized instructions for LLMs. Arguments flow from client call → prompt function → interpolated prompt text → LLM consumption.
 
-
+---
 ## Anthropic Apps
+---
 
 Anthropic Apps = two deployed applications by Anthropic: Claude Code and Computer Use.
 
@@ -1929,8 +2027,9 @@ Key points:
 
 Computer use = abstraction layer where tool system handles Claude communication while Docker container handles actual computer interactions.
 
-
+---
 ## Agents and Workflows
+---
 
 Workflows and agents = strategies for handling user tasks that can't be completed by Claude in a single request.
 
