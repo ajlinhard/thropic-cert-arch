@@ -17,6 +17,11 @@ MCP Chat is a command-line interface application that enables interactive chat c
 ANTHROPIC_API_KEY=""  # Enter your Anthropic API secret key
 ```
 
+2. go to the directory where the specific MCP module is "Workspace\06_MCP\cli_project_COMPLETE"
+```
+cd Workspace\06_MCP\cli_project_COMPLETE
+```
+
 ### Step 2: Install dependencies
 
 #### Option 1: Setup with uv (Recommended)
@@ -46,6 +51,11 @@ uv pip install -e .
 
 ```bash
 uv run main.py
+```
+
+5. Once the project is running open the same venv in another terminal the run:
+```
+uv run mcp dev mcp_server.py
 ```
 
 #### Option 2: Setup without uv

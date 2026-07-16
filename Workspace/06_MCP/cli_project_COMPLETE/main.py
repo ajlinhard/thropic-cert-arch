@@ -10,7 +10,7 @@ from core.claude import Claude
 from core.cli_chat import CliChat
 from core.cli import CliApp
 
-load_dotenv()
+load_dotenv(override=True)
 
 # Anthropic Config
 claude_model = os.getenv("CLAUDE_MODEL", "")
