@@ -1922,7 +1922,12 @@ Common Use Cases = Production monitoring (Sentry), project management (Jira), co
 Key Benefit = Significant flexibility increase for development workflows through modular server connections.
 
 Setup Process = 1) Create MCP server with tools, 2) Add server to Claude Code with name and startup command, 3) Restart Claude Code to access new capabilities.
+```bash
+claude mcp add <your_name_choice> <command to start or access>
+```
 
+### Available MCPs
+![alt text](image-16.png)
 
 ## Parallelizing Claude Code
 
