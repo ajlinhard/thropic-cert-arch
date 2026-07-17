@@ -10,6 +10,11 @@ We are going to be settig up an SSO user through the AWS Identity Center (previo
 - Groups => these are groups of users in the Identity Center. These users can come from a federated 3rd party Adminstrator.
 - Accounts => these are the accounts the IAM Identity Center has access to manage permissions for.
 
+#### IAM
+- Policy => the account level permission rules which can be assigned to different permission management entities: IAM roles, IAM users, Identity Center Permission Sets.
+- Role => account level roles which are temporary credentials for a process to assume. (See AWS docs for a better definition)
+- User => within the account users without the ability to have SSO access.
+
 ## Setup
 1. Create an AWS Identity Center User (not an IAM User): AWS Identity Center => User => Add User
 2. Attach the new User to the AWS Account: AWS Identity Center => AWS Accounts => <your acccount name> => Assign Users or Groups
@@ -99,4 +104,11 @@ role_arn = arn:aws:iam::xxxxxxxxxx:role/bedrock-ai-lead-role
 source_profile = learn-terraform
 region = us-east-1
 output = json
+```
+17. The SSO login is still => ```aws sso login --profile <base sso-session>```
+18. The python or other language code is what changes before creating the AWS client.
+```python
+import boto3
+session = boto3.Session(profile_name="<your sso profile>")
+client = session.client("bedrock-runtime", region_name="us-east-1")
 ```
